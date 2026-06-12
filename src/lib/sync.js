@@ -24,6 +24,20 @@ export async function fetchRemote() {
   }
 }
 
+// Ask the server to scrape a StreetEasy URL. Resolves to the parsed response
+// { ok, blocked, reason, fields } or null on a transport failure.
+export async function scrapeListing(url) {
+  try {
+    const res = await fetch('/api/scrape?url=' + encodeURIComponent(url), {
+      headers: { Accept: 'application/json' },
+    })
+    const data = await res.json()
+    return data && typeof data === 'object' ? data : null
+  } catch {
+    return null
+  }
+}
+
 // Push the shared blob. Resolves to { updatedAt } on success, or false on
 // failure (e.g. offline or store unconfigured).
 export async function pushRemote({ meta, custom }) {

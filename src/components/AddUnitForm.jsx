@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { parseStreetEasyUrl, geocodeWithFallback } from '../lib/geo'
+import { scrapeListing } from '../lib/sync'
 
 const BOROUGHS = ['Brooklyn', 'Manhattan', 'Queens', 'Bronx', 'Staten Island']
 const BEDS_OPTIONS = [
@@ -41,7 +42,9 @@ export function AddUnitForm({ onAdd }) {
   const [beds, setBeds] = useState('0')
   const [baths, setBaths] = useState('1')
   const [available, setAvailable] = useState('')
+  const [photoUrl, setPhotoUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [fetching, setFetching] = useState(false)
   const [msg, setMsg] = useState('')
 
   function handleUrlChange(e) {
@@ -55,6 +58,53 @@ export function AddUnitForm({ onAdd }) {
     }
   }
 
+  // Auto-fill rent / beds / etc. by scraping the StreetEasy page server-side.
+  async function handleFetchDetails() {
+    const parsed = parseStreetEasyUrl(url)
+    if (!parsed) {
+      setMsg('Paste a streeteasy.com listing URL first.')
+      return
+    }
+    // Make sure address/unit/borough from the URL are in place.
+    if (parsed.address) setAddress(parsed.address)
+    if (parsed.unit) setUnit(parsed.unit)
+    if (parsed.borough) setBorough(parsed.borough)
+
+    setFetching(true)
+    setMsg('Fetching details from StreetEasy…')
+    const result = await scrapeListing(parsed.url || url)
+    setFetching(false)
+
+    if (!result) {
+      setMsg('Could not reach the scraper. Fill the fields manually.')
+      return
+    }
+    if (result.blocked) {
+      if (result.reason === 'no_scraper_key') {
+        setMsg('Auto-fetch needs a scraping API key configured in Vercel. Fill manually for now.')
+      } else {
+        setMsg('StreetEasy blocked the fetch this time. Fill manually or try again.')
+      }
+      return
+    }
+
+    const f = result.fields || {}
+    let filled = 0
+    if (f.base_rent != null) { setBaseRent(String(f.base_rent)); filled++ }
+    if (f.net_effective_rent != null) { setNetRent(String(f.net_effective_rent)); filled++ }
+    if (f.beds != null) { setBeds(String(f.beds)); filled++ }
+    if (f.baths != null) { setBaths(String(f.baths)); filled++ }
+    if (f.neighborhood) { setNeighborhood(f.neighborhood); filled++ }
+    if (f.available) { setAvailable(f.available); filled++ }
+    if (f.photo_url) { setPhotoUrl(f.photo_url); filled++ }
+
+    setMsg(
+      filled > 0
+        ? `Auto-filled ${filled} field${filled === 1 ? '' : 's'} — double-check before saving.`
+        : 'Fetched the page but found no parseable fields. Fill manually.'
+    )
+  }
+
   function reset() {
     setUrl('')
     setAddress('')
@@ -65,6 +115,7 @@ export function AddUnitForm({ onAdd }) {
     setBeds('0')
     setBaths('1')
     setAvailable('')
+    setPhotoUrl('')
     setMsg('')
   }
 
@@ -101,7 +152,7 @@ export function AddUnitForm({ onAdd }) {
       commute_to_pace: null,
       amenities: [],
       agent: null,
-      photo_url: null,
+      photo_url: photoUrl || null,
       latitude: geo.latitude,
       longitude: geo.longitude,
       streeteasy_url: parseStreetEasyUrl(url)?.url || (url.trim() || null),
@@ -146,15 +197,36 @@ export function AddUnitForm({ onAdd }) {
         <form onSubmit={handleSubmit} style={{ padding: 14, display: 'grid', gap: 10 }}>
           <div>
             <label style={labelStyle}>StreetEasy URL (auto-fills address / unit / borough)</label>
-            <input
-              type="text"
-              value={url}
-              onChange={handleUrlChange}
-              placeholder="https://streeteasy.com/building/…-brooklyn/4b"
-              style={inputStyle}
-            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={url}
+                onChange={handleUrlChange}
+                placeholder="https://streeteasy.com/building/…-brooklyn/4b"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={handleFetchDetails}
+                disabled={fetching}
+                style={{
+                  flex: '0 0 auto',
+                  background: '#000',
+                  color: '#FCCC0A',
+                  border: 'none',
+                  borderRadius: 4,
+                  padding: '0 14px',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: fetching ? 'wait' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {fetching ? 'Fetching…' : 'Fetch details ↓'}
+              </button>
+            </div>
             <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              The page itself can't be scraped (CORS / bot protection) — fill the rest manually.
+              "Fetch details" pulls rent / beds / etc. from the listing. If it's blocked, just fill the fields manually.
             </div>
           </div>
 

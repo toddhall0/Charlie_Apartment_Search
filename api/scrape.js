@@ -15,6 +15,31 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
+// Scraping-provider config. StreetEasy blocks datacenter IPs (403), so we
+// route through a residential-proxy / JS-rendering service when a key is set.
+// Supported providers: "scraperapi" (default) and "scrapingbee".
+const SCRAPER_KEY = process.env.SCRAPER_API_KEY
+const SCRAPER_PROVIDER = (process.env.SCRAPER_PROVIDER || 'scraperapi').toLowerCase()
+
+// Build the provider request URL that returns the target page's HTML.
+function proxyUrl(target) {
+  const enc = encodeURIComponent(target)
+  if (SCRAPER_PROVIDER === 'scrapingbee') {
+    return (
+      'https://app.scrapingbee.com/api/v1/?' +
+      `api_key=${SCRAPER_KEY}&url=${enc}` +
+      '&render_js=true&premium_proxy=true&country_code=us'
+    )
+  }
+  // Default: ScraperAPI. premium=true uses residential proxies needed to get
+  // past StreetEasy's bot protection.
+  return (
+    'https://api.scraperapi.com/?' +
+    `api_key=${SCRAPER_KEY}&url=${enc}` +
+    '&render=true&premium=true&country_code=us'
+  )
+}
+
 function isStreetEasy(raw) {
   try {
     const u = new URL(raw)
@@ -145,16 +170,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Provide a valid streeteasy.com url' })
   }
 
+  // Without a scraping-provider key, a direct fetch will be blocked (403).
+  // Tell the client so it can prompt for setup instead of silently failing.
+  if (!SCRAPER_KEY) {
+    return res.status(200).json({
+      ok: false,
+      blocked: true,
+      status: 0,
+      reason: 'no_scraper_key',
+      fields: {},
+    })
+  }
+
   let status = 0
   let html = ''
   try {
-    const upstream = await fetch(url, {
+    const upstream = await fetch(proxyUrl(url), {
       headers: {
         'User-Agent': UA,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        Referer: 'https://www.google.com/',
       },
       redirect: 'follow',
     })
@@ -170,6 +205,7 @@ export default async function handler(req, res) {
       ok: false,
       blocked: true,
       status,
+      reason: 'upstream_blocked',
       fields: {},
       debug: { length: html.length },
     })
