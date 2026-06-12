@@ -192,13 +192,8 @@ function parseHeuristics(html) {
   m = text.match(/(\d+(?:\.\d+)?)\s*baths?\b/i)
   if (m) out.baths = toNumber(m[1])
 
-  // Available date — handle month-name, numeric, and "now"/"immediately".
+  // Available date — handle month-name, numeric (M/D/YYYY), and "now".
   out.available = parseAvailability(text)
-
-  // Temporary diagnostic: capture text around the first "available" mention so
-  // we can see StreetEasy's exact format when the patterns miss.
-  const ai = text.search(/date available|available/i)
-  out._availCtx = ai >= 0 ? text.slice(ai, ai + 60) : null
 
   return out
 }
@@ -310,6 +305,6 @@ export default async function handler(req, res) {
     blocked: false,
     status,
     fields,
-    debug: { length: html.length, hasLd: Object.keys(ld).length > 0, availCtx: heur._availCtx },
+    debug: { length: html.length, hasLd: Object.keys(ld).length > 0 },
   })
 }
