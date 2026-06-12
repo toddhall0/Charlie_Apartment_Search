@@ -192,11 +192,32 @@ function parseHeuristics(html) {
   m = text.match(/(\d+(?:\.\d+)?)\s*baths?\b/i)
   if (m) out.baths = toNumber(m[1])
 
-  // Available date.
-  m = text.match(/available\s+(?:on\s+)?([A-Z][a-z]{2,9}\.?\s+\d{1,2}(?:,\s*\d{4})?|now)/i)
-  if (m) out.available = m[1]
+  // Available date — handle month-name, numeric, and "now"/"immediately".
+  out.available = parseAvailability(text)
+
+  // Temporary diagnostic: capture text around the first "available" mention so
+  // we can see StreetEasy's exact format when the patterns miss.
+  const ai = text.search(/date available|available/i)
+  out._availCtx = ai >= 0 ? text.slice(ai, ai + 60) : null
 
   return out
+}
+
+function parseAvailability(text) {
+  const month = /([A-Z][a-z]{2,8}\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)/
+  const numeric = /(\d{1,2}\/\d{1,2}\/\d{2,4})/
+  const patterns = [
+    new RegExp(`date available[:\\s]+${month.source}`, 'i'),
+    new RegExp(`date available[:\\s]+${numeric.source}`, 'i'),
+    new RegExp(`available\\s+(?:on\\s+|starting\\s+|beginning\\s+)?${month.source}`, 'i'),
+    new RegExp(`available\\s+(?:on\\s+|starting\\s+|beginning\\s+)?${numeric.source}`, 'i'),
+    /available\s+(immediately|now)/i,
+  ]
+  for (const re of patterns) {
+    const m = text.match(re)
+    if (m) return m[1].replace(/\s+/g, ' ').trim()
+  }
+  return null
 }
 
 // Detect the lease term in months; default to 12.
@@ -289,6 +310,6 @@ export default async function handler(req, res) {
     blocked: false,
     status,
     fields,
-    debug: { length: html.length, hasLd: Object.keys(ld).length > 0 },
+    debug: { length: html.length, hasLd: Object.keys(ld).length > 0, availCtx: heur._availCtx },
   })
 }
