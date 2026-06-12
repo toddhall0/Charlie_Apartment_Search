@@ -14,6 +14,7 @@ import {
   downloadExport,
   importData,
 } from './lib/storage'
+import { fetchRemote, pushRemote } from './lib/sync'
 
 const TABS = ['Listings', 'Map', 'Schedule']
 const BOROUGHS = ['All', 'Brooklyn', 'Manhattan', 'Queens', 'Bronx']
@@ -48,9 +49,97 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(''), 1400)
   }
 
-  // Persist on change.
+  // Persist on change (localStorage = offline cache).
   useEffect(() => saveMeta(meta), [meta])
   useEffect(() => saveCustom(custom), [custom])
+
+  // ---- Cross-device sync against /api/data ----
+  // 'offline' | 'syncing' | 'synced'
+  const [syncStatus, setSyncStatus] = useState('offline')
+  // Serialized snapshot of the last state known to match the server, so the
+  // push effect can no-op when we apply remote data (avoids a feedback loop).
+  const lastSyncedRef = useRef(JSON.stringify({ meta: loadMeta(), custom: loadCustom() }))
+  const remoteUpdatedAtRef = useRef(0)
+
+  function applyRemote(remote) {
+    const m = remote.meta || {}
+    const c = Array.isArray(remote.custom) ? remote.custom : []
+    lastSyncedRef.current = JSON.stringify({ meta: m, custom: c })
+    remoteUpdatedAtRef.current = remote.updatedAt || 0
+    setMeta(m)
+    setCustom(c)
+  }
+
+  // Initial load: pull shared data; if the store is empty but this device has
+  // local data, migrate it up so nothing is lost on first run.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const remote = await fetchRemote()
+      if (cancelled) return
+      if (!remote) {
+        setSyncStatus('offline')
+        return
+      }
+      const hasRemote = Object.keys(remote.meta).length > 0 || remote.custom.length > 0
+      const hasLocal = Object.keys(meta).length > 0 || custom.length > 0
+      if (hasRemote) {
+        applyRemote(remote)
+        setSyncStatus('synced')
+      } else if (hasLocal) {
+        const ok = await pushRemote({ meta, custom })
+        if (!cancelled && ok) {
+          lastSyncedRef.current = JSON.stringify({ meta, custom })
+          remoteUpdatedAtRef.current = ok.updatedAt
+          setSyncStatus('synced')
+        }
+      } else {
+        setSyncStatus('synced')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Push local changes to the shared store (debounced).
+  useEffect(() => {
+    const serialized = JSON.stringify({ meta, custom })
+    if (serialized === lastSyncedRef.current) return
+    setSyncStatus('syncing')
+    const t = setTimeout(async () => {
+      const ok = await pushRemote({ meta, custom })
+      if (ok) {
+        lastSyncedRef.current = serialized
+        remoteUpdatedAtRef.current = ok.updatedAt
+        setSyncStatus('synced')
+      } else {
+        setSyncStatus('offline')
+      }
+    }, 800)
+    return () => clearTimeout(t)
+  }, [meta, custom])
+
+  // Re-pull when the tab regains focus, so edits from another device show up.
+  useEffect(() => {
+    async function refresh() {
+      if (document.visibilityState === 'hidden') return
+      const remote = await fetchRemote()
+      if (!remote) return
+      if ((remote.updatedAt || 0) > remoteUpdatedAtRef.current) {
+        applyRemote(remote)
+        setSyncStatus('synced')
+      }
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Merge seed + custom listings with their per-listing meta.
   const merged = useMemo(() => {
@@ -289,8 +378,11 @@ export default function App() {
       {/* Footer: backup controls */}
       <footer style={{ borderTop: '1px solid #ddd', background: '#fff', padding: '16px 14px 26px' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', fontFamily: 'Helvetica, Arial, sans-serif' }}>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
-            Data is saved on this device only. Export a backup to move it between devices.
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <SyncBadge status={syncStatus} />
+            {syncStatus === 'offline'
+              ? 'Shared sync unavailable — saved on this device. Export a backup to be safe.'
+              : 'Synced across devices. Export gives you a portable backup.'}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleExport} style={footerBtn}>
@@ -339,6 +431,21 @@ const footerBtn = {
   fontSize: 13,
   cursor: 'pointer',
   fontFamily: 'Helvetica, Arial, sans-serif',
+}
+
+function SyncBadge({ status }) {
+  const map = {
+    synced: { color: '#00933C', label: 'Synced' },
+    syncing: { color: '#0039A6', label: 'Syncing…' },
+    offline: { color: '#808183', label: 'Local only' },
+  }
+  const s = map[status] || map.offline
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: s.color }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+      {s.label}
+    </span>
+  )
 }
 
 function Legend() {
