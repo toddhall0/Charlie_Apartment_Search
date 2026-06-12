@@ -32,13 +32,18 @@ function proxyUrl(target) {
     )
   }
   // Default: ScraperAPI. premium=true uses residential proxies needed to get
-  // past StreetEasy's bot protection.
+  // past StreetEasy's bot protection. We skip JS rendering — the price,
+  // net-effective, and JSON-LD data are in the server-rendered HTML, so a
+  // non-rendered fetch is much faster and uses far fewer credits.
   return (
     'https://api.scraperapi.com/?' +
     `api_key=${SCRAPER_KEY}&url=${enc}` +
-    '&render=true&premium=true&country_code=us'
+    '&premium=true&country_code=us'
   )
 }
+
+// Allow up to 60s — proxied scrapes can be slow (default Vercel cap is 10s).
+export const maxDuration = 60
 
 function isStreetEasy(raw) {
   try {
