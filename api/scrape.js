@@ -139,17 +139,47 @@ function parseHeuristics(html) {
   const out = {}
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
 
-  // Net effective rent.
-  let m = text.match(/net effective[^$]{0,40}\$\s?([\d,]+)/i)
+  // Net effective rent — try both label orders ("Net effective … $X" and
+  // "$X … net effective").
+  let m =
+    text.match(/net effective(?:\s*rent)?[^$\d]{0,20}\$\s?([\d,]{3,})/i) ||
+    text.match(/\$\s?([\d,]{3,})[^$\d]{0,20}net effective/i)
   if (m) out.net_effective_rent = toNumber(m[1])
 
-  // Base / advertised rent (first "$X,XXX" that looks like monthly rent).
-  m = text.match(/\$\s?([\d,]{4,})\s*(?:\/\s*mo|per month|monthly)?/i)
-  if (m) out.base_rent_guess = toNumber(m[1])
+  // Explicitly labeled gross/asking rent (StreetEasy shows this on concession
+  // listings alongside the net effective figure).
+  m = text.match(/gross(?:\s*rent)?[^$\d]{0,20}\$\s?([\d,]{3,})/i)
+  if (m) out.gross_rent = toNumber(m[1])
 
-  // Concession: "N months free" / "1 month free".
+  // First plausible monthly "$X,XXX" as a base-rent fallback.
+  m = text.match(/\$\s?([\d,]{4,})\s*(?:\/\s*mo|per month|monthly)?/i)
+  const firstDollar = m ? toNumber(m[1]) : null
+
+  // Concession: "N months free" + lease term ("on a 12-month lease").
   m = text.match(/(\d+(?:\.\d+)?)\s+months?\s+free/i)
-  if (m) out.concession_note = `${m[1]} month${m[1] === '1' ? '' : 's'} free`
+  let monthsFree = null
+  if (m) {
+    monthsFree = Number(m[1])
+    const term = leaseTerm(text)
+    out.concession_note = `${m[1]} month${monthsFree === 1 ? '' : 's'} free on ${term}-mo lease`
+    out._term = term
+  }
+  out._monthsFree = monthsFree
+
+  // Base rent: prefer the labeled gross, else the first dollar figure.
+  out.base_rent_guess = out.gross_rent ?? firstDollar
+
+  // Derive net effective from base + concession when it wasn't found verbatim.
+  // net = base * (term - monthsFree) / term  (matches StreetEasy's math).
+  if (
+    out.net_effective_rent == null &&
+    monthsFree &&
+    out.base_rent_guess &&
+    out._term > monthsFree
+  ) {
+    out.net_effective_rent = Math.round((out.base_rent_guess * (out._term - monthsFree)) / out._term)
+    out.net_computed = true
+  }
 
   // Beds.
   if (/\bstudio\b/i.test(text)) out.beds = 0
@@ -167,6 +197,16 @@ function parseHeuristics(html) {
   if (m) out.available = m[1]
 
   return out
+}
+
+// Detect the lease term in months; default to 12.
+function leaseTerm(text) {
+  const m = text.match(/(\d{1,2})[\s-]*month[\s-]*lease/i)
+  if (m) {
+    const t = Number(m[1])
+    if (t >= 6 && t <= 24) return t
+  }
+  return 12
 }
 
 export default async function handler(req, res) {
@@ -221,15 +261,24 @@ export default async function handler(req, res) {
   const ogTitle = metaContent(html, 'og:title')
   const ogImage = metaContent(html, 'og:image')
 
+  // og:title looks like "865 Rogers Avenue #400 in Flatbush, Brooklyn | StreetEasy"
+  // -> pull the neighborhood between "in " and the borough comma.
+  let neighborhood = ld.neighborhood ?? null
+  if (!neighborhood && ogTitle) {
+    const nm = ogTitle.match(/\bin\s+([^,|]+?),/i)
+    if (nm) neighborhood = nm[1].trim()
+  }
+
   const base_rent = ld.base_rent ?? heur.base_rent_guess ?? null
   const fields = {
     address: ogTitle || null,
     base_rent,
     net_effective_rent: heur.net_effective_rent ?? null,
+    net_computed: heur.net_computed || false,
     concession_note: heur.concession_note ?? null,
     beds: ld.beds ?? heur.beds ?? null,
     baths: heur.baths ?? null,
-    neighborhood: ld.neighborhood ?? null,
+    neighborhood,
     available: heur.available ?? null,
     photo_url: ld.photo_url || ogImage || null,
   }
