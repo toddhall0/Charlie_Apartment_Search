@@ -1,0 +1,42 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #f2f2ef;
+  font-family: Helvetica, Arial, sans-serif;
+  color: #111;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Prevent horizontal scroll on narrow screens. */
+body {
+  overflow-x: hidden;
+}
+
+a {
+  color: #0039a6;
+}
+
+button {
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* Leaflet popups in our typeface. */
+.leaflet-container {
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* Inputs shouldn't overflow their grid cells. */
+input,
+select,
+textarea {
+  max-width: 100%;
+}
