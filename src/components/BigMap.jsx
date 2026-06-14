@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
-import { statusColor } from '../constants'
+import { statusColor, lineColor } from '../constants'
 
 function googleMapsSearchUrl(listing) {
   const q = `${listing.address}, ${listing.borough}, NY ${listing.zip || ''}`.trim()
@@ -27,11 +27,16 @@ function popupHtml(listing) {
     </div>`
 }
 
-// Full-width interactive map. Markers recolor live as statuses change.
-export function BigMap({ listings, height = '70vh' }) {
+// Cache the subway data across mounts so we only fetch it once.
+let subwayCache = null
+
+// Full-width interactive map. Markers recolor live as statuses change, with the
+// NYC subway lines + stops drawn underneath.
+export function BigMap({ listings, showSubway = true, height = '70vh' }) {
   const elRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef({})
+  const subwayLayerRef = useRef(null)
 
   // Initialize the map once.
   useEffect(() => {
@@ -41,17 +46,99 @@ export function BigMap({ listings, height = '70vh' }) {
       maxZoom: 19,
       attribution: '© OpenStreetMap',
     }).addTo(map)
+
+    // Dedicated pane for the subway overlay, kept below listing markers.
+    map.createPane('subwayPane')
+    map.getPane('subwayPane').style.zIndex = 350
+
     mapRef.current = map
-    // Default view (NYC) until bounds are fit.
     map.setView([40.7, -73.95], 11)
     return () => {
       map.remove()
       mapRef.current = null
       markersRef.current = {}
+      subwayLayerRef.current = null
     }
   }, [])
 
-  // Sync markers whenever listings (or their statuses) change.
+  // Load + draw the subway overlay (once data is available and toggle is on).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    let cancelled = false
+
+    function draw(data) {
+      if (cancelled || !mapRef.current) return
+      // Remove any existing overlay first.
+      if (subwayLayerRef.current) {
+        map.removeLayer(subwayLayerRef.current)
+        subwayLayerRef.current = null
+      }
+      if (!showSubway) return
+
+      const group = L.layerGroup([], { pane: 'subwayPane' })
+
+      // Lines: one colored polyline per segment, colored by trunk symbol.
+      data.lines.forEach((line) => {
+        const color = lineColor(line.sym).bg
+        line.segs.forEach((seg) => {
+          // seg is [[lng,lat], ...] -> Leaflet wants [lat,lng]
+          const latlngs = seg.map((c) => [c[1], c[0]])
+          L.polyline(latlngs, {
+            pane: 'subwayPane',
+            color,
+            weight: 3,
+            opacity: 0.75,
+            interactive: false,
+          }).addTo(group)
+        })
+      })
+
+      // Stations: small white dots with a name + line popup.
+      data.stations.forEach((st) => {
+        const m = L.circleMarker([st.c[1], st.c[0]], {
+          pane: 'subwayPane',
+          radius: 2.5,
+          color: '#333',
+          weight: 1,
+          fillColor: '#fff',
+          fillOpacity: 1,
+        })
+        const bullets = st.l
+          .map((ln) => {
+            const c = lineColor(ln)
+            return `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:${c.bg};color:${c.fg};font-size:10px;font-weight:700;margin-right:2px">${ln}</span>`
+          })
+          .join('')
+        m.bindPopup(
+          `<div style="font-family:Helvetica,Arial,sans-serif;font-size:12px"><strong>${st.n}</strong><br/><span style="display:inline-flex;margin-top:3px">${bullets}</span></div>`
+        )
+        m.addTo(group)
+      })
+
+      group.addTo(map)
+      subwayLayerRef.current = group
+    }
+
+    if (subwayCache) {
+      draw(subwayCache)
+    } else if (showSubway) {
+      fetch('/subway.json')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return
+          subwayCache = data
+          draw(data)
+        })
+        .catch(() => {})
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [showSubway])
+
+  // Sync listing markers whenever listings (or their statuses) change.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -81,7 +168,6 @@ export function BigMap({ listings, height = '70vh' }) {
       marker.bindPopup(popupHtml(listing))
     })
 
-    // Remove markers for listings that no longer exist.
     Object.keys(markersRef.current).forEach((id) => {
       if (!seen.has(id)) {
         map.removeLayer(markersRef.current[id])

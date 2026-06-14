@@ -40,6 +40,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [hideDead, setHideDead] = useState(false)
   const [sort, setSort] = useState('neighborhood')
+  const [showSubway, setShowSubway] = useState(true)
 
   // Toast.
   const [toast, setToast] = useState('')
@@ -386,7 +387,13 @@ export default function App() {
 
         {tab === 'Map' && (
           <>
-            <BigMap listings={merged} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#444' }}>
+                <input type="checkbox" checked={showSubway} onChange={(e) => setShowSubway(e.target.checked)} />
+                Show subway lines &amp; stops
+              </label>
+            </div>
+            <BigMap listings={merged} showSubway={showSubway} />
             <Legend />
           </>
         )}

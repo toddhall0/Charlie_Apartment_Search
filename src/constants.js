@@ -8,6 +8,7 @@ export const LINE_COLORS = {
   '4': { bg: '#00933C', fg: '#FFFFFF' },
   '5': { bg: '#00933C', fg: '#FFFFFF' },
   '6': { bg: '#00933C', fg: '#FFFFFF' },
+  '7': { bg: '#B933AD', fg: '#FFFFFF' },
   A: { bg: '#0039A6', fg: '#FFFFFF' },
   C: { bg: '#0039A6', fg: '#FFFFFF' },
   E: { bg: '#0039A6', fg: '#FFFFFF' },
