@@ -215,6 +215,20 @@ function parseAvailability(text) {
   return null
 }
 
+// Parse a clean street address from the og:title.
+// "865 Rogers Avenue #400 in Flatbush, Brooklyn | StreetEasy" -> "865 Rogers Avenue"
+// For named-building pages StreetEasy still puts the street address here, so
+// this yields the real address rather than the building-name slug.
+function streetAddressFromTitle(title) {
+  if (!title) return null
+  let t = String(title).split('|')[0].trim() // drop "| StreetEasy"
+  t = t.split(/\sin\s/i)[0].trim() // drop " in {neighborhood}, {borough}"
+  // strip a trailing unit token: "#4B", "Apt 4B", "Unit 12", "#400"
+  t = t.replace(/\s*#\s*\S+\s*$/, '').trim()
+  t = t.replace(/\s*(?:apt|unit|apartment|ph|fl|floor)\.?\s+\S+\s*$/i, '').trim()
+  return t || null
+}
+
 // Detect the lease term in months; default to 12.
 function leaseTerm(text) {
   const m = text.match(/(\d{1,2})[\s-]*month[\s-]*lease/i)
@@ -286,8 +300,11 @@ export default async function handler(req, res) {
   }
 
   const base_rent = ld.base_rent ?? heur.base_rent_guess ?? null
+  const street = streetAddressFromTitle(ogTitle)
   const fields = {
-    address: ogTitle || null,
+    // The real street address parsed from the page (not the building-name slug).
+    address: street,
+    address_raw: ogTitle || null,
     base_rent,
     net_effective_rent: heur.net_effective_rent ?? null,
     net_computed: heur.net_computed || false,

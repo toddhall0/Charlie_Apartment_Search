@@ -90,6 +90,9 @@ export function AddUnitForm({ onAdd }) {
 
     const f = result.fields || {}
     let filled = 0
+    // Prefer the real street address from the page over the URL slug, which is
+    // the building name for named buildings (e.g. "Rialto West").
+    if (f.address && /\d/.test(f.address)) { setAddress(f.address); filled++ }
     if (f.base_rent != null) { setBaseRent(String(f.base_rent)); filled++ }
     if (f.net_effective_rent != null) { setNetRent(String(f.net_effective_rent)); filled++ }
     if (f.beds != null) { setBeds(String(f.beds)); filled++ }
