@@ -15,6 +15,7 @@ import {
   importData,
 } from './lib/storage'
 import { fetchRemote, pushRemote } from './lib/sync'
+import { findDuplicateGroups, isDuplicateOf } from './lib/dedupe'
 
 const TABS = ['Listings', 'Map', 'Schedule']
 const BOROUGHS = ['All', 'Brooklyn', 'Manhattan', 'Queens', 'Bronx']
@@ -156,6 +157,9 @@ export default function App() {
     })
   }, [custom, meta])
 
+  // Groups of listings that look like the same apartment (duplicates).
+  const duplicateGroups = useMemo(() => findDuplicateGroups(merged), [merged])
+
   // ---- Handlers ----
   function updateMeta(id, patch) {
     setMeta((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }))
@@ -178,10 +182,23 @@ export default function App() {
     updateMeta(id, { notes })
   }
 
+  // Returns false (and adds nothing) when the listing duplicates an existing one.
   function handleAdd(listing) {
+    if (isDuplicateOf(listing, merged)) {
+      showToast('Already on the list')
+      return false
+    }
     setCustom((prev) => [...prev, listing])
     showToast('Unit added')
     setTab('Listings')
+    return true
+  }
+
+  // Remove a user-added listing from the duplicates banner (with confirm).
+  function confirmRemove(listing) {
+    if (window.confirm(`Delete ${listing.address} ${listing.unit}? This cannot be undone.`)) {
+      handleRemove(listing.id)
+    }
   }
 
   function handleRemove(id) {
@@ -347,6 +364,8 @@ export default function App() {
 
             <AddUnitForm onAdd={handleAdd} />
 
+            <DuplicatesNotice groups={duplicateGroups} onRemove={confirmRemove} />
+
             <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
               {visible.length} listing{visible.length === 1 ? '' : 's'}
             </div>
@@ -431,6 +450,66 @@ const footerBtn = {
   fontSize: 13,
   cursor: 'pointer',
   fontFamily: 'Helvetica, Arial, sans-serif',
+}
+
+// Yellow MTA-style warning listing duplicate apartments, with a delete button
+// for each user-added copy.
+function DuplicatesNotice({ groups, onRemove }) {
+  if (!groups || groups.length === 0) return null
+  return (
+    <div
+      style={{
+        background: '#FCCC0A',
+        border: '2px solid #000',
+        borderRadius: 6,
+        padding: '12px 14px',
+        marginBottom: 16,
+        fontFamily: 'Helvetica, Arial, sans-serif',
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#000' }}>
+        ⚠ Possible duplicate{groups.length > 1 ? 's' : ''} — {groups.length} apartment
+        {groups.length > 1 ? 's' : ''} listed more than once
+      </div>
+      {groups.map((g, i) => (
+        <div key={i} style={{ padding: '8px 0', borderTop: i ? '1px solid rgba(0,0,0,0.2)' : 'none' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#000' }}>
+            {g[0].address} {g[0].unit}
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0' }}>
+            {g.map((l, j) => (
+              <li key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12, color: '#000' }}>
+                <span>
+                  Copy {j + 1}: {l.neighborhood || '—'} ·{' '}
+                  <strong>{l.user_added ? 'added by you' : 'original list'}</strong>
+                </span>
+                {l.user_added ? (
+                  <button
+                    onClick={() => onRemove(l)}
+                    style={{
+                      marginLeft: 'auto',
+                      background: '#EE352E',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '4px 10px',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Delete this one
+                  </button>
+                ) : (
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>(can't delete)</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function SyncBadge({ status }) {

@@ -159,8 +159,13 @@ export function AddUnitForm({ onAdd }) {
       user_added: true,
     }
 
-    onAdd(listing)
+    const added = onAdd(listing)
     setBusy(false)
+    if (added === false) {
+      // Duplicate — keep the form open so the user can adjust or cancel.
+      setMsg('This apartment is already on your list — not added again.')
+      return
+    }
     reset()
     setOpen(false)
   }
