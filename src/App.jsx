@@ -14,7 +14,8 @@ import {
   downloadExport,
   importData,
 } from './lib/storage'
-import { fetchRemote, pushRemote } from './lib/sync'
+import { fetchRemote, pushRemote, scrapeListing } from './lib/sync'
+import { geocodeWithFallback } from './lib/geo'
 import { findDuplicateGroups, isDuplicateOf } from './lib/dedupe'
 
 const TABS = ['Listings', 'Map', 'Schedule']
@@ -193,6 +194,49 @@ export default function App() {
     showToast('Unit added')
     setTab('Listings')
     return true
+  }
+
+  // One-time backfill: re-fetch the real street address (and re-geocode) for
+  // every added listing that has a StreetEasy link.
+  const [fixing, setFixing] = useState(false)
+  const [fixMsg, setFixMsg] = useState('')
+  async function handleFixAddresses() {
+    const targets = custom.filter((l) => l.streeteasy_url)
+    if (targets.length === 0) {
+      showToast('No added listings to fix')
+      return
+    }
+    if (!window.confirm(`Re-fetch addresses for ${targets.length} added listing(s) from StreetEasy? This uses your scraping credits.`)) {
+      return
+    }
+    setFixing(true)
+    const updated = [...custom]
+    let done = 0
+    let fixed = 0
+    for (let i = 0; i < updated.length; i++) {
+      const l = updated[i]
+      if (!l.streeteasy_url) continue
+      done++
+      setFixMsg(`Checking ${done} of ${targets.length}…`)
+      const result = await scrapeListing(l.streeteasy_url)
+      const f = result && !result.blocked ? result.fields || {} : null
+      if (f && f.address && /\d/.test(f.address) && f.address !== l.address) {
+        const next = { ...l, address: f.address }
+        if (f.neighborhood && (!l.neighborhood || l.neighborhood === '—')) {
+          next.neighborhood = f.neighborhood
+        }
+        // Re-geocode the corrected address so the map pin moves too.
+        const geo = await geocodeWithFallback(next.address, next.borough)
+        next.latitude = geo.latitude
+        next.longitude = geo.longitude
+        updated[i] = next
+        fixed++
+      }
+    }
+    setCustom(updated)
+    setFixing(false)
+    setFixMsg('')
+    showToast(fixed ? `Fixed ${fixed} address${fixed === 1 ? '' : 'es'}` : 'Addresses already correct')
   }
 
   // Remove a user-added listing from the duplicates banner (with confirm).
@@ -410,7 +454,7 @@ export default function App() {
               ? 'Shared sync unavailable — saved on this device. Export a backup to be safe.'
               : 'Synced across devices. Export gives you a portable backup.'}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={handleExport} style={footerBtn}>
               Export JSON
             </button>
@@ -418,6 +462,9 @@ export default function App() {
               Import JSON
             </button>
             <input ref={fileRef} type="file" accept="application/json" onChange={handleImportFile} style={{ display: 'none' }} />
+            <button onClick={handleFixAddresses} disabled={fixing} style={{ ...footerBtn, background: '#0039A6', cursor: fixing ? 'wait' : 'pointer' }}>
+              {fixing ? fixMsg || 'Fixing…' : 'Fix addresses from StreetEasy'}
+            </button>
           </div>
         </div>
       </footer>
