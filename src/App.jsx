@@ -196,23 +196,25 @@ export default function App() {
     return true
   }
 
-  // One-time backfill: re-fetch the real street address (and re-geocode) for
-  // every added listing that has a StreetEasy link.
+  // Re-fetch each added listing from its StreetEasy link: fix building-name
+  // addresses (and re-geocode) and backfill any missing rent / beds / etc.
+  // Never overwrites values that already exist.
   const [fixing, setFixing] = useState(false)
   const [fixMsg, setFixMsg] = useState('')
   async function handleFixAddresses() {
     const targets = custom.filter((l) => l.streeteasy_url)
     if (targets.length === 0) {
-      showToast('No added listings to fix')
+      showToast('No added listings to refresh')
       return
     }
-    if (!window.confirm(`Re-fetch addresses for ${targets.length} added listing(s) from StreetEasy? This uses your scraping credits.`)) {
+    if (!window.confirm(`Refresh ${targets.length} added listing(s) from StreetEasy? Fixes addresses and fills any missing rent / beds / availability. Uses your scraping credits.`)) {
       return
     }
+    const isBlank = (v) => v == null || v === ''
     setFixing(true)
     const updated = [...custom]
     let done = 0
-    let fixed = 0
+    let changedCount = 0
     for (let i = 0; i < updated.length; i++) {
       const l = updated[i]
       if (!l.streeteasy_url) continue
@@ -220,23 +222,50 @@ export default function App() {
       setFixMsg(`Checking ${done} of ${targets.length}…`)
       const result = await scrapeListing(l.streeteasy_url)
       const f = result && !result.blocked ? result.fields || {} : null
-      if (f && f.address && /\d/.test(f.address) && f.address !== l.address) {
-        const next = { ...l, address: f.address }
-        if (f.neighborhood && (!l.neighborhood || l.neighborhood === '—')) {
-          next.neighborhood = f.neighborhood
-        }
-        // Re-geocode the corrected address so the map pin moves too.
+      if (!f) continue
+
+      const next = { ...l }
+      let changed = false
+      let addressChanged = false
+
+      // Address: replace a building-name with the real street address.
+      if (f.address && /\d/.test(f.address) && f.address !== l.address) {
+        next.address = f.address
+        changed = true
+        addressChanged = true
+      }
+      // Backfill only when the field is currently empty (beds 0 = Studio counts).
+      if (isBlank(l.base_rent) && f.base_rent != null) { next.base_rent = f.base_rent; changed = true }
+      if (isBlank(l.net_effective_rent) && f.net_effective_rent != null) {
+        next.net_effective_rent = f.net_effective_rent
+        if (f.concession_note) next.concession_note = f.concession_note
+        changed = true
+      }
+      if (isBlank(l.beds) && f.beds != null) { next.beds = f.beds; changed = true }
+      if (isBlank(l.baths) && f.baths != null) { next.baths = f.baths; changed = true }
+      if (isBlank(l.available) && f.available) { next.available = f.available; changed = true }
+      if (isBlank(l.photo_url) && f.photo_url) { next.photo_url = f.photo_url; changed = true }
+      if ((isBlank(l.neighborhood) || l.neighborhood === '—') && f.neighborhood) {
+        next.neighborhood = f.neighborhood
+        changed = true
+      }
+
+      // Re-geocode only when the address actually changed.
+      if (addressChanged) {
         const geo = await geocodeWithFallback(next.address, next.borough)
         next.latitude = geo.latitude
         next.longitude = geo.longitude
+      }
+
+      if (changed) {
         updated[i] = next
-        fixed++
+        changedCount++
       }
     }
     setCustom(updated)
     setFixing(false)
     setFixMsg('')
-    showToast(fixed ? `Fixed ${fixed} address${fixed === 1 ? '' : 'es'}` : 'Addresses already correct')
+    showToast(changedCount ? `Updated ${changedCount} listing${changedCount === 1 ? '' : 's'}` : 'Everything already up to date')
   }
 
   // Remove a user-added listing from the duplicates banner (with confirm).
@@ -463,7 +492,7 @@ export default function App() {
             </button>
             <input ref={fileRef} type="file" accept="application/json" onChange={handleImportFile} style={{ display: 'none' }} />
             <button onClick={handleFixAddresses} disabled={fixing} style={{ ...footerBtn, background: '#0039A6', cursor: fixing ? 'wait' : 'pointer' }}>
-              {fixing ? fixMsg || 'Fixing…' : 'Fix addresses from StreetEasy'}
+              {fixing ? fixMsg || 'Refreshing…' : 'Refresh details from StreetEasy'}
             </button>
           </div>
         </div>
