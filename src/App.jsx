@@ -5,7 +5,7 @@ import ListingCard from './components/ListingCard'
 import AddUnitForm from './components/AddUnitForm'
 import BigMap from './components/BigMap'
 import ScheduleTab from './components/ScheduleTab'
-import { STATUSES, statusColor, DEFAULT_STATUS, HEADER_LINES } from './constants'
+import { STATUSES, DEFAULT_STATUS, HEADER_LINES } from './constants'
 import {
   loadMeta,
   saveMeta,
@@ -611,27 +611,30 @@ function SyncBadge({ status }) {
 }
 
 function Legend() {
+  const items = [
+    { label: 'Available', color: '#00933C', opacity: 1 },
+    { label: 'Off-market / unavailable', color: '#808183', opacity: 0.55 },
+    { label: 'Opted against', color: '#EE352E', opacity: 1 },
+    { label: 'Added by you / verify', color: '#FCCC0A', opacity: 1 },
+  ]
   return (
     <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 14, fontFamily: 'Helvetica, Arial, sans-serif' }}>
-      {STATUSES.map((s) => (
-        <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#444' }}>
+      {items.map((it) => (
+        <span key={it.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#444' }}>
           <span
             style={{
               width: 14,
               height: 14,
               borderRadius: '50%',
-              background: statusColor(s),
+              background: it.color,
+              opacity: it.opacity,
               border: '1.5px solid #000',
               display: 'inline-block',
             }}
           />
-          {s}
+          {it.label}
         </span>
       ))}
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#444' }}>
-        <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#808183', opacity: 0.55, border: '1.5px solid #000', display: 'inline-block' }} />
-        Off-market
-      </span>
     </div>
   )
 }

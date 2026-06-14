@@ -1,6 +1,16 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
-import { statusColor, lineColor } from '../constants'
+import { lineColor } from '../constants'
+
+// Map marker color reflects availability + decision (not tracking status):
+//   opted against (Passed) -> red, off-market -> grey, available -> green,
+//   anything else (e.g. user-added / needs verifying) -> yellow.
+function mapColor(listing) {
+  if (listing.status === 'Passed') return '#EE352E'
+  if (listing.market_flag === 'dead') return '#808183'
+  if (listing.market_flag === 'active') return '#00933C'
+  return '#FCCC0A'
+}
 
 function googleMapsSearchUrl(listing) {
   const q = `${listing.address}, ${listing.borough}, NY ${listing.zip || ''}`.trim()
@@ -150,7 +160,7 @@ export function BigMap({ listings, showSubway = true, height = '70vh' }) {
       seen.add(listing.id)
       pts.push([listing.latitude, listing.longitude])
       const isDead = listing.market_flag === 'dead'
-      const color = isDead ? '#808183' : statusColor(listing.status)
+      const color = mapColor(listing)
       const opacity = isDead ? 0.55 : 0.95
 
       let marker = markersRef.current[listing.id]
