@@ -56,7 +56,9 @@ function isStreetEasy(raw) {
 
 // Markers that indicate a bot-protection / challenge page rather than content.
 function looksBlocked(html, status) {
-  if (status === 403 || status === 429 || status === 503) return true
+  // Treat any 4xx/5xx (auth challenge, rate limit, or transient proxy error)
+  // as "couldn't read it" so we don't mistake a hiccup for a real result.
+  if (status === 403 || status === 429 || status >= 500) return true
   if (!html) return true
   const m = html.toLowerCase()
   return (
