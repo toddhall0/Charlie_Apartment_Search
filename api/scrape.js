@@ -215,6 +215,22 @@ function parseAvailability(text) {
   return null
 }
 
+// Detect whether the listing is still on the market.
+//   dead   -> page says it's no longer available / rented / in contract
+//   active -> a current rent price is present
+//   verify -> couldn't tell
+function detectMarket(html, baseRent) {
+  const off =
+    /no longer available|no longer listed|no longer on the market|this listing is no longer|listing (?:has been )?removed|off the market|not currently (?:listed|available)|has been (?:rented|leased)|\bin contract\b|\brented\b/i
+  if (off.test(html)) {
+    return { flag: 'dead', status: 'No longer available (checked on add)' }
+  }
+  if (baseRent != null) {
+    return { flag: 'active', status: 'Active — confirmed live (checked on add)' }
+  }
+  return { flag: 'verify', status: 'Could not confirm availability — verify' }
+}
+
 // Parse a clean street address from the og:title.
 // "865 Rogers Avenue #400 in Flatbush, Brooklyn | StreetEasy" -> "865 Rogers Avenue"
 // For named-building pages StreetEasy still puts the street address here, so
@@ -301,6 +317,7 @@ export default async function handler(req, res) {
 
   const base_rent = ld.base_rent ?? heur.base_rent_guess ?? null
   const street = streetAddressFromTitle(ogTitle)
+  const market = detectMarket(html, base_rent)
   const fields = {
     // The real street address parsed from the page (not the building-name slug).
     address: street,
@@ -314,6 +331,8 @@ export default async function handler(req, res) {
     neighborhood,
     available: heur.available ?? null,
     photo_url: ld.photo_url || ogImage || null,
+    market_flag: market.flag,
+    market_status: market.status,
   }
 
   const found = Object.values(fields).some((v) => v != null)

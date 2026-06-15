@@ -43,6 +43,7 @@ export function AddUnitForm({ onAdd }) {
   const [baths, setBaths] = useState('1')
   const [available, setAvailable] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
+  const [market, setMarket] = useState(null) // { flag, status } from the availability check
   const [busy, setBusy] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [msg, setMsg] = useState('')
@@ -100,6 +101,12 @@ export function AddUnitForm({ onAdd }) {
     if (f.neighborhood) { setNeighborhood(f.neighborhood); filled++ }
     if (f.available) { setAvailable(f.available); filled++ }
     if (f.photo_url) { setPhotoUrl(f.photo_url); filled++ }
+    if (f.market_flag) setMarket({ flag: f.market_flag, status: f.market_status })
+
+    if (f.market_flag === 'dead') {
+      setMsg('⚠ This listing appears to be NO LONGER AVAILABLE. You can still add it (it\'ll show as off-market).')
+      return
+    }
 
     setMsg(
       filled > 0
@@ -119,6 +126,7 @@ export function AddUnitForm({ onAdd }) {
     setBaths('1')
     setAvailable('')
     setPhotoUrl('')
+    setMarket(null)
     setMsg('')
   }
 
@@ -129,10 +137,29 @@ export function AddUnitForm({ onAdd }) {
       return
     }
     setBusy(true)
+    const seUrl = parseStreetEasyUrl(url)?.url || (url.trim() || null)
+
+    // Double-check availability: reuse the fetch result if we have it, else
+    // run a quick check now so every added listing has a confirmed status.
+    let mkt = market
+    if (!mkt && seUrl) {
+      setMsg('Checking availability…')
+      const r = await scrapeListing(seUrl)
+      if (r && !r.blocked && r.fields && r.fields.market_flag) {
+        mkt = { flag: r.fields.market_flag, status: r.fields.market_status }
+      }
+    }
+
     setMsg('Geocoding…')
     const geo = await geocodeWithFallback(address.trim(), borough)
     const baseNum = baseRent === '' ? null : Number(baseRent)
     const netNum = netRent === '' ? null : Number(netRent)
+
+    const pinNote = geo.approximate ? ' (pin approximate)' : ''
+    const market_flag = mkt ? mkt.flag : 'verify'
+    const market_status = mkt
+      ? (mkt.status || 'Added by you') + pinNote
+      : 'Added by you · verify' + pinNote
 
     const listing = {
       id: slugId(address.trim(), unit.trim()),
@@ -147,10 +174,8 @@ export function AddUnitForm({ onAdd }) {
       beds: Number(beds),
       baths: baths === '' ? null : Number(baths),
       available: available.trim() || null,
-      market_status: geo.approximate
-        ? 'Added by you · verify (pin approximate)'
-        : 'Added by you · verify',
-      market_flag: 'verify',
+      market_status,
+      market_flag,
       subway_access: [],
       commute_to_pace: null,
       amenities: [],
@@ -158,7 +183,7 @@ export function AddUnitForm({ onAdd }) {
       photo_url: photoUrl || null,
       latitude: geo.latitude,
       longitude: geo.longitude,
-      streeteasy_url: parseStreetEasyUrl(url)?.url || (url.trim() || null),
+      streeteasy_url: seUrl,
       user_added: true,
     }
 

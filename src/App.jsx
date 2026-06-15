@@ -249,6 +249,12 @@ export default function App() {
         next.neighborhood = f.neighborhood
         changed = true
       }
+      // Re-check availability (always update, so a now-rented listing flips to off-market).
+      if (f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
+        next.market_flag = f.market_flag
+        next.market_status = f.market_status || next.market_status
+        changed = true
+      }
 
       // Re-geocode only when the address actually changed.
       if (addressChanged) {
