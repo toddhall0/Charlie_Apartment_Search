@@ -215,20 +215,36 @@ function parseAvailability(text) {
   return null
 }
 
-// Detect whether the listing is still on the market.
-//   dead   -> page says it's no longer available / rented / in contract
-//   active -> a current rent price is present
-//   verify -> couldn't tell
+// Signals that might indicate off-market. Generic words ("rented", "in
+// contract") are NOT used for the decision because they appear in cross-listing
+// sections of perfectly active pages — we only record them for diagnostics.
+function marketSignals(html) {
+  const tests = {
+    thisNoLonger: /this (?:listing|rental|unit|home|apartment) is no longer available/i,
+    delisted: /this (?:listing|rental|unit|home|apartment) has been (?:delisted|removed|deactivated)/i,
+    noLongerStreeteasy: /no longer available on streeteasy/i,
+    // diagnostics only:
+    rented: /\brented\b/i,
+    inContract: /\bin contract\b/i,
+    offMarket: /off the market/i,
+    noLongerAvail: /no longer available/i,
+    notCurrently: /not currently (?:listed|available)/i,
+  }
+  const hits = {}
+  for (const [k, re] of Object.entries(tests)) hits[k] = re.test(html)
+  return hits
+}
+
+// Decide market status using only high-precision delisting banners.
 function detectMarket(html, baseRent) {
-  const off =
-    /no longer available|no longer listed|no longer on the market|this listing is no longer|listing (?:has been )?removed|off the market|not currently (?:listed|available)|has been (?:rented|leased)|\bin contract\b|\brented\b/i
-  if (off.test(html)) {
-    return { flag: 'dead', status: 'No longer available (checked on add)' }
+  const s = marketSignals(html)
+  if (s.thisNoLonger || s.delisted || s.noLongerStreeteasy) {
+    return { flag: 'dead', status: 'No longer available (checked)', hits: s }
   }
   if (baseRent != null) {
-    return { flag: 'active', status: 'Active — confirmed live (checked on add)' }
+    return { flag: 'active', status: 'Active — confirmed live (checked)', hits: s }
   }
-  return { flag: 'verify', status: 'Could not confirm availability — verify' }
+  return { flag: 'verify', status: 'Could not confirm availability — verify', hits: s }
 }
 
 // Parse a clean street address from the og:title.
@@ -341,6 +357,6 @@ export default async function handler(req, res) {
     blocked: false,
     status,
     fields,
-    debug: { length: html.length, hasLd: Object.keys(ld).length > 0 },
+    debug: { length: html.length, hasLd: Object.keys(ld).length > 0, marketHits: market.hits },
   })
 }
