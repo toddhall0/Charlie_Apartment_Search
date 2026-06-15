@@ -56,6 +56,12 @@ export default function App() {
   useEffect(() => saveMeta(meta), [meta])
   useEffect(() => saveCustom(custom), [custom])
 
+  // Keep a ref to the latest custom listings for the background sweep.
+  const customRef = useRef(custom)
+  useEffect(() => {
+    customRef.current = custom
+  }, [custom])
+
   // ---- Cross-device sync against /api/data ----
   // 'offline' | 'syncing' | 'synced'
   const [syncStatus, setSyncStatus] = useState('offline')
@@ -273,6 +279,43 @@ export default function App() {
     setFixMsg('')
     showToast(changedCount ? `Updated ${changedCount} listing${changedCount === 1 ? '' : 's'}` : 'Everything already up to date')
   }
+
+  // Silent availability re-check of added listings (used by the on-load sweep).
+  async function runAvailabilitySweep() {
+    const list = customRef.current
+    const targets = list.filter((l) => l.streeteasy_url)
+    if (targets.length === 0) return
+    const updated = [...list]
+    let changed = false
+    let flipped = 0
+    for (let i = 0; i < updated.length; i++) {
+      const l = updated[i]
+      if (!l.streeteasy_url) continue
+      const r = await scrapeListing(l.streeteasy_url)
+      const f = r && !r.blocked ? r.fields || {} : null
+      if (f && f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
+        if (f.market_flag === 'dead' && l.market_flag !== 'dead') flipped++
+        updated[i] = { ...l, market_flag: f.market_flag, market_status: f.market_status || l.market_status }
+        changed = true
+      }
+    }
+    if (changed) {
+      setCustom(updated)
+      if (flipped) showToast(`${flipped} listing${flipped === 1 ? '' : 's'} no longer available`)
+    }
+  }
+
+  // Run the availability sweep once per page load, after sync has settled.
+  const autoCheckedRef = useRef(false)
+  useEffect(() => {
+    if (autoCheckedRef.current) return
+    autoCheckedRef.current = true
+    const t = setTimeout(() => {
+      runAvailabilitySweep()
+    }, 2500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Remove a user-added listing from the duplicates banner (with confirm).
   function confirmRemove(listing) {
