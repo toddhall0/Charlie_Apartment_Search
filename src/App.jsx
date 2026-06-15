@@ -11,6 +11,8 @@ import {
   saveMeta,
   loadCustom,
   saveCustom,
+  loadChecks,
+  saveChecks,
   downloadExport,
   importData,
 } from './lib/storage'
@@ -61,6 +63,18 @@ export default function App() {
   useEffect(() => {
     customRef.current = custom
   }, [custom])
+
+  // Per-device record of when each listing's availability was last checked.
+  const checksRef = useRef(loadChecks())
+  const CHECK_TTL_MS = 12 * 60 * 60 * 1000 // 12 hours
+  function markChecked(id) {
+    checksRef.current = { ...checksRef.current, [id]: Date.now() }
+    saveChecks(checksRef.current)
+  }
+  function checkedRecently(id) {
+    const t = checksRef.current[id]
+    return t != null && Date.now() - t < CHECK_TTL_MS
+  }
 
   // ---- Cross-device sync against /api/data ----
   // 'offline' | 'syncing' | 'synced'
@@ -197,6 +211,7 @@ export default function App() {
       return false
     }
     setCustom((prev) => [...prev, listing])
+    markChecked(listing.id) // availability was verified during add
     showToast('Unit added')
     setTab('Listings')
     return true
@@ -229,6 +244,7 @@ export default function App() {
       const result = await scrapeListing(l.streeteasy_url)
       const f = result && !result.blocked ? result.fields || {} : null
       if (!f) continue
+      markChecked(l.id) // counts toward the 12h throttle
 
       const next = { ...l }
       let changed = false
@@ -291,9 +307,13 @@ export default function App() {
     for (let i = 0; i < updated.length; i++) {
       const l = updated[i]
       if (!l.streeteasy_url) continue
+      // Skip anything already checked within the last 12 hours.
+      if (checkedRecently(l.id)) continue
       const r = await scrapeListing(l.streeteasy_url)
       const f = r && !r.blocked ? r.fields || {} : null
-      if (f && f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
+      if (!f) continue // couldn't check (blocked/offline) — don't mark as checked
+      markChecked(l.id)
+      if (f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
         if (f.market_flag === 'dead' && l.market_flag !== 'dead') flipped++
         updated[i] = { ...l, market_flag: f.market_flag, market_status: f.market_status || l.market_status }
         changed = true

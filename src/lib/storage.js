@@ -7,6 +7,7 @@
 
 const META_KEY = 'apt-meta-v1'
 const CUSTOM_KEY = 'apt-custom-v1'
+const CHECKS_KEY = 'apt-checks-v1' // { [listingId]: lastAvailabilityCheckMs }
 
 function safeParse(raw, fallback) {
   if (!raw) return fallback
@@ -44,6 +45,22 @@ export function saveCustom(custom) {
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom))
   } catch (e) {
     console.warn('Failed to save custom listings', e)
+  }
+}
+
+// Per-device record of when each listing's availability was last checked.
+// Kept out of the synced blob on purpose (throttling is per-device).
+export function loadChecks() {
+  if (typeof localStorage === 'undefined') return {}
+  return safeParse(localStorage.getItem(CHECKS_KEY), {})
+}
+
+export function saveChecks(checks) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(CHECKS_KEY, JSON.stringify(checks))
+  } catch (e) {
+    console.warn('Failed to save checks', e)
   }
 }
 
