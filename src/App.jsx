@@ -44,6 +44,7 @@ export default function App() {
   const [boroughFilter, setBoroughFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [hideDead, setHideDead] = useState(false)
+  const [apptOnly, setApptOnly] = useState(false)
   const [sort, setSort] = useState('neighborhood')
   const [view, setView] = useState('cards') // 'cards' | 'table'
   const [showSubway, setShowSubway] = useState(true)
@@ -465,6 +466,7 @@ export default function App() {
     if (boroughFilter !== 'All') list = list.filter((l) => l.borough === boroughFilter)
     if (statusFilter !== 'All') list = list.filter((l) => l.status === statusFilter)
     if (hideDead) list = list.filter((l) => l.market_flag !== 'dead')
+    if (apptOnly) list = list.filter((l) => l.showingDate)
 
     const statusOrder = (s) => {
       const i = STATUSES.indexOf(s)
@@ -494,7 +496,7 @@ export default function App() {
       return sort === 'net-asc' ? ra - rb : rb - ra
     })
     return list
-  }, [merged, boroughFilter, statusFilter, hideDead, sort])
+  }, [merged, boroughFilter, statusFilter, hideDead, apptOnly, sort])
 
   const selectStyle = {
     padding: '7px 9px',
@@ -586,6 +588,10 @@ export default function App() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: '#444' }}>
                 <input type="checkbox" checked={hideDead} onChange={(e) => setHideDead(e.target.checked)} />
                 Hide off-market
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: '#444' }}>
+                <input type="checkbox" checked={apptOnly} onChange={(e) => setApptOnly(e.target.checked)} />
+                Appointments only
               </label>
             </div>
 
