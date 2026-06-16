@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import seedListings, { PACE } from './data/listings'
 import { SubwayBullets } from './components/SubwayBullet'
 import ListingCard from './components/ListingCard'
+import ListingTable from './components/ListingTable'
 import AddUnitForm from './components/AddUnitForm'
 import BigMap from './components/BigMap'
 import ScheduleTab from './components/ScheduleTab'
@@ -43,6 +44,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [hideDead, setHideDead] = useState(false)
   const [sort, setSort] = useState('neighborhood')
+  const [view, setView] = useState('cards') // 'cards' | 'table'
   const [showSubway, setShowSubway] = useState(true)
   // Subway stations (for the offline transit-commute estimate).
   const [stations, setStations] = useState(null)
@@ -556,22 +558,49 @@ export default function App() {
 
             <DuplicatesNotice groups={duplicateGroups} onRemove={confirmRemove} />
 
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
-              {visible.length} listing{visible.length === 1 ? '' : 's'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>
+                {visible.length} listing{visible.length === 1 ? '' : 's'}
+              </span>
+              <div style={{ display: 'flex', border: '1px solid #aaa', borderRadius: 4, overflow: 'hidden' }}>
+                {['cards', 'table'].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: view === v ? '#000' : '#fff',
+                      color: view === v ? '#FCCC0A' : '#444',
+                      fontFamily: 'Helvetica, Arial, sans-serif',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {visible.map((l) => (
-              <ListingCard
-                key={l.id}
-                listing={l}
-                onStatusChange={handleStatusChange}
-                onShowingChange={handleShowingChange}
-                onNotesChange={handleNotesChange}
-                onMarketOverride={handleMarketOverride}
-                onRemove={handleRemove}
-                onToast={showToast}
-              />
-            ))}
+            {view === 'table' ? (
+              <ListingTable listings={visible} onStatusChange={handleStatusChange} />
+            ) : (
+              visible.map((l) => (
+                <ListingCard
+                  key={l.id}
+                  listing={l}
+                  onStatusChange={handleStatusChange}
+                  onShowingChange={handleShowingChange}
+                  onNotesChange={handleNotesChange}
+                  onMarketOverride={handleMarketOverride}
+                  onRemove={handleRemove}
+                  onToast={showToast}
+                />
+              ))
+            )}
           </>
         )}
 
