@@ -3,6 +3,7 @@ import { SubwayBullets } from './SubwayBullet'
 import RentStrip from './RentStrip'
 import MiniMap from './MiniMap'
 import { STATUSES, statusColor } from '../constants'
+import RankSelect from './RankSelect'
 
 function googleMapsSearchUrl(listing) {
   const q = `${listing.address}, ${listing.borough}, NY ${listing.zip || ''}`.trim()
@@ -113,7 +114,7 @@ const btnBase = {
   textAlign: 'center',
 }
 
-export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesChange, onRemove, onMarketOverride, onToast }) {
+export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesChange, onRemove, onMarketOverride, onSetRank, rankedCount, onToast }) {
   const isDead = listing.market_flag === 'dead'
   const status = listing.status
   const borderColor = isDead ? '#808183' : statusColor(status)
@@ -182,6 +183,31 @@ export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesC
       <Photo listing={listing} />
 
       <div style={{ padding: '12px 14px' }}>
+        {/* Rank row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          {listing.rank != null && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 26,
+                height: 26,
+                padding: '0 6px',
+                borderRadius: 4,
+                background: '#FCCC0A',
+                color: '#000',
+                fontWeight: 700,
+                fontSize: 14,
+                border: '1.5px solid #000',
+              }}
+            >
+              #{listing.rank}
+            </span>
+          )}
+          <RankSelect rank={listing.rank} rankedCount={rankedCount} onSetRank={onSetRank ? (v) => onSetRank(listing.id, v) : () => {}} />
+        </div>
+
         {/* Address row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ minWidth: 0 }}>

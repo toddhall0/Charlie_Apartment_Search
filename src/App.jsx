@@ -24,6 +24,7 @@ import { findDuplicateGroups, isDuplicateOf } from './lib/dedupe'
 const TABS = ['Listings', 'Map', 'Schedule']
 const BOROUGHS = ['All', 'Brooklyn', 'Manhattan', 'Queens', 'Bronx']
 const SORTS = [
+  { value: 'rank', label: 'My rank' },
   { value: 'neighborhood', label: 'Neighborhood' },
   { value: 'net-asc', label: 'Net rent ↑' },
   { value: 'net-desc', label: 'Net rent ↓' },
@@ -208,6 +209,7 @@ export default function App() {
         notes: m.notes || '',
         showingDate: m.showingDate || '',
         showingTime: m.showingTime || '',
+        rank: m.rank != null ? m.rank : null,
         market_flag,
         market_status,
         marketOverride: override,
@@ -215,6 +217,9 @@ export default function App() {
       }
     })
   }, [custom, meta, stations])
+
+  // How many listings currently have a rank (for the rank picker's range).
+  const rankedCount = useMemo(() => merged.filter((l) => l.rank != null).length, [merged])
 
   // Groups of listings that look like the same apartment (duplicates).
   const duplicateGroups = useMemo(() => findDuplicateGroups(merged), [merged])
@@ -239,6 +244,28 @@ export default function App() {
 
   function handleNotesChange(id, notes) {
     updateMeta(id, { notes })
+  }
+
+  // Set a listing's rank, inserting at that position and re-sequencing all
+  // ranked listings so numbers stay unique and contiguous (1..N). Passing null
+  // unranks it. Setting a taken number bumps the others down automatically.
+  function handleSetRank(id, newRank) {
+    setMeta((prev) => {
+      const ordered = Object.keys(prev)
+        .filter((k) => k !== id && prev[k] && prev[k].rank != null)
+        .sort((a, b) => prev[a].rank - prev[b].rank)
+      if (newRank != null) {
+        const pos = Math.max(0, Math.min(ordered.length, newRank - 1))
+        ordered.splice(pos, 0, id)
+      }
+      const out = { ...prev }
+      // Clear this listing's rank first (covers the unrank case).
+      out[id] = { ...(out[id] || {}), rank: null }
+      ordered.forEach((rid, i) => {
+        out[rid] = { ...(out[rid] || {}), rank: i + 1 }
+      })
+      return out
+    })
   }
 
   // Manually force a listing's availability ('dead' | 'active') or clear the
@@ -444,6 +471,13 @@ export default function App() {
     }
 
     list.sort((a, b) => {
+      if (sort === 'rank') {
+        // Ranked first (ascending), unranked last.
+        const ra = a.rank == null ? Infinity : a.rank
+        const rb = b.rank == null ? Infinity : b.rank
+        if (ra !== rb) return ra - rb
+        return (a.neighborhood || '').localeCompare(b.neighborhood || '')
+      }
       if (sort === 'neighborhood') {
         return (a.neighborhood || '').localeCompare(b.neighborhood || '')
       }
@@ -586,7 +620,12 @@ export default function App() {
             </div>
 
             {view === 'table' ? (
-              <ListingTable listings={visible} onStatusChange={handleStatusChange} />
+              <ListingTable
+                listings={visible}
+                onStatusChange={handleStatusChange}
+                onSetRank={handleSetRank}
+                rankedCount={rankedCount}
+              />
             ) : (
               visible.map((l) => (
                 <ListingCard
@@ -597,6 +636,8 @@ export default function App() {
                   onNotesChange={handleNotesChange}
                   onMarketOverride={handleMarketOverride}
                   onRemove={handleRemove}
+                  onSetRank={handleSetRank}
+                  rankedCount={rankedCount}
                   onToast={showToast}
                 />
               ))

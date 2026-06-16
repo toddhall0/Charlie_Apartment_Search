@@ -1,4 +1,5 @@
 import { STATUSES, statusColor } from '../constants'
+import RankSelect from './RankSelect'
 
 function money(n) {
   return n == null ? '—' : '$' + Number(n).toLocaleString('en-US')
@@ -45,7 +46,7 @@ const td = {
   verticalAlign: 'top',
 }
 
-export function ListingTable({ listings, onStatusChange }) {
+export function ListingTable({ listings, onStatusChange, onSetRank, rankedCount }) {
   if (!listings.length) {
     return <div style={{ fontSize: 13, color: '#888' }}>No listings match your filters.</div>
   }
@@ -54,6 +55,7 @@ export function ListingTable({ listings, onStatusChange }) {
       <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760, fontFamily: 'Helvetica, Arial, sans-serif' }}>
         <thead>
           <tr>
+            <th style={{ ...th, borderBottom: '3px solid #FCCC0A' }}>Rank</th>
             <th style={{ ...th, borderBottom: '3px solid #FCCC0A' }}>Address</th>
             <th style={{ ...th, borderBottom: '3px solid #FCCC0A' }}>Neighborhood</th>
             <th style={{ ...th, borderBottom: '3px solid #FCCC0A' }}>Bd/Ba</th>
@@ -69,6 +71,14 @@ export function ListingTable({ listings, onStatusChange }) {
             const isDead = l.market_flag === 'dead'
             return (
               <tr key={l.id} style={{ opacity: isDead ? 0.6 : 1 }}>
+                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                  <RankSelect
+                    rank={l.rank}
+                    rankedCount={rankedCount}
+                    compact
+                    onSetRank={(v) => onSetRank(l.id, v)}
+                  />
+                </td>
                 <td style={td}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <span
