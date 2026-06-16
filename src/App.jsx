@@ -47,6 +47,7 @@ export default function App() {
   const [sort, setSort] = useState('neighborhood')
   const [view, setView] = useState('cards') // 'cards' | 'table'
   const [showSubway, setShowSubway] = useState(true)
+  const [mapApptOnly, setMapApptOnly] = useState(false)
   // Subway stations (for the offline transit-commute estimate).
   const [stations, setStations] = useState(null)
   useEffect(() => {
@@ -645,18 +646,35 @@ export default function App() {
           </>
         )}
 
-        {tab === 'Map' && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#444' }}>
-                <input type="checkbox" checked={showSubway} onChange={(e) => setShowSubway(e.target.checked)} />
-                Show subway lines &amp; stops
-              </label>
-            </div>
-            <BigMap listings={merged} showSubway={showSubway} />
-            <Legend />
-          </>
-        )}
+        {tab === 'Map' && (() => {
+          const apptCount = merged.filter((l) => l.showingDate).length
+          const mapListings = mapApptOnly ? merged.filter((l) => l.showingDate) : merged
+          return (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#444' }}>
+                  <input
+                    type="checkbox"
+                    checked={mapApptOnly}
+                    onChange={(e) => setMapApptOnly(e.target.checked)}
+                  />
+                  Appointments only{apptCount ? ` (${apptCount})` : ''}
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#444' }}>
+                  <input type="checkbox" checked={showSubway} onChange={(e) => setShowSubway(e.target.checked)} />
+                  Show subway lines &amp; stops
+                </label>
+              </div>
+              {mapApptOnly && apptCount === 0 && (
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+                  No appointments scheduled yet — set a showing date on a listing to see it here.
+                </div>
+              )}
+              <BigMap listings={mapListings} showSubway={showSubway} />
+              <Legend />
+            </>
+          )
+        })()}
 
         {tab === 'Schedule' && <ScheduleTab listings={merged} />}
       </main>
