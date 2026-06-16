@@ -63,6 +63,11 @@ export default function App() {
   useEffect(() => {
     customRef.current = custom
   }, [custom])
+  // Latest meta (for reading manual market overrides inside the sweep).
+  const metaRef = useRef(meta)
+  useEffect(() => {
+    metaRef.current = meta
+  }, [meta])
 
   // Per-device record of when each listing's availability was last checked.
   const checksRef = useRef(loadChecks())
@@ -169,12 +174,22 @@ export default function App() {
     const all = [...seedListings, ...custom]
     return all.map((l) => {
       const m = meta[l.id] || {}
+      // A manual availability override (set on the card) wins over the
+      // scraped/seed market flag.
+      const override = m.marketOverride || null
+      const market_flag = override || l.market_flag
+      let market_status = l.market_status
+      if (override === 'dead') market_status = 'Marked no longer available'
+      else if (override === 'active') market_status = 'Marked available'
       return {
         ...l,
         status: m.status || DEFAULT_STATUS,
         notes: m.notes || '',
         showingDate: m.showingDate || '',
         showingTime: m.showingTime || '',
+        market_flag,
+        market_status,
+        marketOverride: override,
       }
     })
   }, [custom, meta])
@@ -202,6 +217,15 @@ export default function App() {
 
   function handleNotesChange(id, notes) {
     updateMeta(id, { notes })
+  }
+
+  // Manually force a listing's availability ('dead' | 'active') or clear the
+  // override (null) to let the auto-check decide again.
+  function handleMarketOverride(id, value) {
+    updateMeta(id, { marketOverride: value })
+    if (value === 'dead') showToast('Marked no longer available')
+    else if (value === 'active') showToast('Marked available')
+    else showToast('Back to auto-check')
   }
 
   // Returns false (and adds nothing) when the listing duplicates an existing one.
@@ -271,8 +295,9 @@ export default function App() {
         next.neighborhood = f.neighborhood
         changed = true
       }
-      // Re-check availability (always update, so a now-rented listing flips to off-market).
-      if (f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
+      // Re-check availability — but never override a manual setting.
+      const overridden = meta[l.id] && meta[l.id].marketOverride
+      if (!overridden && f.market_flag && (f.market_flag !== l.market_flag || f.market_status !== l.market_status)) {
         next.market_flag = f.market_flag
         next.market_status = f.market_status || next.market_status
         changed = true
@@ -307,6 +332,8 @@ export default function App() {
     for (let i = 0; i < updated.length; i++) {
       const l = updated[i]
       if (!l.streeteasy_url) continue
+      // Don't touch listings you've set manually.
+      if (metaRef.current[l.id] && metaRef.current[l.id].marketOverride) continue
       // Skip anything already checked within the last 12 hours.
       if (checkedRecently(l.id)) continue
       const r = await scrapeListing(l.streeteasy_url)
@@ -520,6 +547,7 @@ export default function App() {
                 onStatusChange={handleStatusChange}
                 onShowingChange={handleShowingChange}
                 onNotesChange={handleNotesChange}
+                onMarketOverride={handleMarketOverride}
                 onRemove={handleRemove}
                 onToast={showToast}
               />

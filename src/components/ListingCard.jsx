@@ -113,7 +113,7 @@ const btnBase = {
   textAlign: 'center',
 }
 
-export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesChange, onRemove, onToast }) {
+export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesChange, onRemove, onMarketOverride, onToast }) {
   const isDead = listing.market_flag === 'dead'
   const status = listing.status
   const borderColor = isDead ? '#808183' : statusColor(status)
@@ -205,6 +205,35 @@ export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesC
           {listing.user_added && (
             <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#0039A6' }}>● Added by you</span>
           )}
+          <div style={{ marginTop: 7, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {isDead ? (
+              <button
+                onClick={() => onMarketOverride(listing.id, 'active')}
+                style={{ ...btnBase, background: '#fff', color: '#00933C', border: '2px solid #00933C' }}
+              >
+                Mark available
+              </button>
+            ) : (
+              <button
+                onClick={() => onMarketOverride(listing.id, 'dead')}
+                style={{ ...btnBase, background: '#fff', color: '#EE352E', border: '2px solid #EE352E' }}
+              >
+                Mark no longer available
+              </button>
+            )}
+            {listing.marketOverride && (
+              <button
+                onClick={() => onMarketOverride(listing.id, null)}
+                style={{ ...btnBase, background: '#f2f2f2', color: '#333', border: '1px solid #aaa' }}
+                title="Stop overriding and let the auto-check decide"
+              >
+                ↺ Auto
+              </button>
+            )}
+            {listing.marketOverride && (
+              <span style={{ fontSize: 11, color: '#888', fontWeight: 700 }}>set manually</span>
+            )}
+          </div>
         </div>
 
         {/* Subway rows */}
