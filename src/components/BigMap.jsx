@@ -28,11 +28,16 @@ function popupHtml(listing) {
     ? `<a href="${listing.streeteasy_url}" target="_blank" rel="noreferrer">StreetEasy ↗</a>`
     : ''
   const gm = `<a href="${googleMapsSearchUrl(listing)}" target="_blank" rel="noreferrer">Google Maps ↗</a>`
+  const commute = listing.commute_to_pace || (listing.transit_estimate ? listing.transit_estimate + ' (est.)' : '')
+  const commuteRow = commute
+    ? `<div style="color:#0039A6;font-weight:700;margin-bottom:5px">→ Pace: ${commute}</div>`
+    : ''
   return `
     <div style="font-family:Helvetica,Arial,sans-serif;font-size:13px;min-width:170px">
       <div style="font-weight:700">${listing.address} ${listing.unit || ''}</div>
       <div style="color:#444;margin:3px 0">${listing.neighborhood} · ${price}</div>
       <div style="color:#444;margin-bottom:5px">${listing.market_status || ''}</div>
+      ${commuteRow}
       <div style="display:flex;gap:10px">${se} ${gm}</div>
     </div>`
 }

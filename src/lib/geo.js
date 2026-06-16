@@ -146,7 +146,50 @@ export async function geocode(address, borough) {
   return { latitude, longitude, approximate: false }
 }
 
-// Geocode with a borough-center fallback. Always resolves.
+// Nearest subway station (from bundled subway.json stations, where each
+// station's coord is [lng, lat]) to a {latitude, longitude} point.
+export function nearestStation(point, stations) {
+  if (!point || point.latitude == null || !stations || !stations.length) return null
+  let best = null
+  let bestD = Infinity
+  for (const s of stations) {
+    const d = haversine(point, { latitude: s.c[1], longitude: s.c[0] })
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  return best ? { station: best, distance: bestD } : null
+}
+
+// Rough public-transit commute estimate (minutes) from a unit to a destination,
+// using only the bundled subway stations. Model calibrated against the verified
+// seed commute times: a fixed overhead, walking to/from stations at ~3 mph, and
+// an effective subway pace that absorbs stops + route indirectness.
+export function estimateTransitMinutes(unit, stations, dest) {
+  const o = nearestStation(unit, stations)
+  const d = nearestStation(dest, stations)
+  if (!o || !d) return null
+  const ride = haversine(
+    { latitude: o.station.c[1], longitude: o.station.c[0] },
+    { latitude: d.station.c[1], longitude: d.station.c[0] }
+  )
+  const BASE = 11 // entering/exiting + average wait
+  const WALK = 22 // min per mile (~3 mph, with stairs)
+  const RIDE = 5.0 // min per mile, effective (stops + indirectness)
+  return Math.round(BASE + WALK * (o.distance + d.distance) + RIDE * ride)
+}
+
+// Format minutes as a rounded "≈X–Y min" range.
+export function formatTransitRange(mins) {
+  if (mins == null) return null
+  let lo = Math.round((mins * 0.9) / 5) * 5
+  let hi = Math.round((mins * 1.12) / 5) * 5
+  if (lo < 5) lo = 5
+  if (hi <= lo) hi = lo + 5
+  return `≈${lo}–${hi} min`
+}
+
 export async function geocodeWithFallback(address, borough) {
   try {
     return await geocode(address, borough)

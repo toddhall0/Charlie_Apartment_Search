@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import seedListings from './data/listings'
+import seedListings, { PACE } from './data/listings'
 import { SubwayBullets } from './components/SubwayBullet'
 import ListingCard from './components/ListingCard'
 import AddUnitForm from './components/AddUnitForm'
@@ -17,7 +17,7 @@ import {
   importData,
 } from './lib/storage'
 import { fetchRemote, pushRemote, scrapeListing } from './lib/sync'
-import { geocodeWithFallback } from './lib/geo'
+import { geocodeWithFallback, estimateTransitMinutes, formatTransitRange } from './lib/geo'
 import { findDuplicateGroups, isDuplicateOf } from './lib/dedupe'
 
 const TABS = ['Listings', 'Map', 'Schedule']
@@ -44,6 +44,20 @@ export default function App() {
   const [hideDead, setHideDead] = useState(false)
   const [sort, setSort] = useState('neighborhood')
   const [showSubway, setShowSubway] = useState(true)
+  // Subway stations (for the offline transit-commute estimate).
+  const [stations, setStations] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/subway.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data && Array.isArray(data.stations)) setStations(data.stations)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Toast.
   const [toast, setToast] = useState('')
@@ -181,6 +195,11 @@ export default function App() {
       let market_status = l.market_status
       if (override === 'dead') market_status = 'Marked no longer available'
       else if (override === 'active') market_status = 'Marked available'
+      // Offline transit estimate (only when there's no curated commute string).
+      let transit_estimate = null
+      if (!l.commute_to_pace && stations && l.latitude != null) {
+        transit_estimate = formatTransitRange(estimateTransitMinutes(l, stations, PACE))
+      }
       return {
         ...l,
         status: m.status || DEFAULT_STATUS,
@@ -190,9 +209,10 @@ export default function App() {
         market_flag,
         market_status,
         marketOverride: override,
+        transit_estimate,
       }
     })
-  }, [custom, meta])
+  }, [custom, meta, stations])
 
   // Groups of listings that look like the same apartment (duplicates).
   const duplicateGroups = useMemo(() => findDuplicateGroups(merged), [merged])

@@ -245,11 +245,16 @@ export function ListingCard({ listing, onStatusChange, onShowingChange, onNotesC
               <span style={{ fontSize: 12, color: '#777' }}>· {s.distance}</span>
             </div>
           ))}
-          {listing.commute_to_pace && (
+          {listing.commute_to_pace ? (
             <div style={{ color: '#0039A6', fontWeight: 700, fontSize: 13, marginTop: 4 }}>
               → Pace: {listing.commute_to_pace}
             </div>
-          )}
+          ) : listing.transit_estimate ? (
+            <div style={{ color: '#0039A6', fontWeight: 700, fontSize: 13, marginTop: 4 }}>
+              → Pace: {listing.transit_estimate}{' '}
+              <span style={{ fontWeight: 400, color: '#888' }}>(subway, est.)</span>
+            </div>
+          ) : null}
         </div>
 
         <MiniMap listing={listing} />
