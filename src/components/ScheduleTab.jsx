@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import RoutePlanner from './RoutePlanner'
 import CalendarView from './CalendarView'
 import { buildICS } from '../lib/ics'
+import { to12h } from '../lib/time'
 
 function googleMapsSearchUrl(listing) {
   const q = `${listing.address}, ${listing.borough}, NY ${listing.zip || ''}`.trim()
@@ -160,7 +161,7 @@ export function ScheduleTab({ listings }) {
               >
                 <span style={{ fontWeight: 700 }}>
                   {s.showingDate}
-                  {s.showingTime ? ` · ${s.showingTime}` : ''}
+                  {s.showingTime ? ` · ${to12h(s.showingTime)}` : ''}
                 </span>
                 <span style={{ color: '#ccc' }}>|</span>
                 <span>

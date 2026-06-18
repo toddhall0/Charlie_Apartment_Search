@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { haversine, nearestNeighborRoute } from '../lib/geo'
+import { to12h } from '../lib/time'
 
 function transitDirUrl(a, b) {
   return `https://www.google.com/maps/dir/?api=1&origin=${a.latitude},${a.longitude}&destination=${b.latitude},${b.longitude}&travelmode=transit`
@@ -110,7 +111,7 @@ export function RoutePlanner({ showings }) {
                 </div>
                 <div style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
-                    {stop.showingTime ? stop.showingTime + ' · ' : ''}
+                    {stop.showingTime ? to12h(stop.showingTime) + ' · ' : ''}
                     {stop.address} {stop.unit}
                   </div>
                   <div style={{ fontSize: 12, color: '#666' }}>{stop.neighborhood}</div>

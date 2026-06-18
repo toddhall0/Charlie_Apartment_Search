@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { statusColor } from '../constants'
+import { to12h } from '../lib/time'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -130,9 +131,9 @@ export function CalendarView({ showings }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}
-                      title={`${s.showingTime ? s.showingTime + ' · ' : ''}${s.address} ${s.unit || ''} (${s.neighborhood || ''})`}
+                      title={`${s.showingTime ? to12h(s.showingTime) + ' · ' : ''}${s.address} ${s.unit || ''} (${s.neighborhood || ''})`}
                     >
-                      {s.showingTime ? <strong>{s.showingTime} </strong> : null}
+                      {s.showingTime ? <strong>{to12h(s.showingTime)} </strong> : null}
                       {s.address}
                     </div>
                   )
