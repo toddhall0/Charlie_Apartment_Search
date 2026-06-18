@@ -165,7 +165,21 @@ export function ScheduleTab({ listings }) {
                 </span>
                 <span style={{ color: '#ccc' }}>|</span>
                 <span>
-                  {s.address} {s.unit} <span style={{ color: '#777' }}>({s.neighborhood})</span>
+                  {s.streeteasy_url ? (
+                    <a
+                      href={s.streeteasy_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontWeight: 700, color: '#0039A6', textDecoration: 'underline' }}
+                    >
+                      {s.address} {s.unit}
+                    </a>
+                  ) : (
+                    <span style={{ fontWeight: 700 }}>
+                      {s.address} {s.unit}
+                    </span>
+                  )}{' '}
+                  <span style={{ color: '#777' }}>({s.neighborhood})</span>
                 </span>
                 <a
                   href={googleMapsSearchUrl(s)}

@@ -138,7 +138,7 @@ export function CalendarView({ showings }) {
                     </div>
                   )
                   return s.streeteasy_url ? (
-                    <a key={s.id} href={s.streeteasy_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                    <a key={s.id} href={s.streeteasy_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }} title="Open on StreetEasy ↗">
                       {chip}
                     </a>
                   ) : (
