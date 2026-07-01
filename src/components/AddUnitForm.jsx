@@ -82,9 +82,13 @@ export function AddUnitForm({ onAdd }) {
     }
     if (result.blocked) {
       if (result.reason === 'no_scraper_key') {
-        setMsg('Auto-fetch needs a scraping API key configured in Vercel. Fill manually for now.')
+        setMsg('Auto-fetch needs a scraping API key (SCRAPER_API_KEY) configured in Vercel. Fill manually for now.')
+      } else if (result.reason === 'scraper_auth') {
+        setMsg('The scraping API key looks invalid or expired — check SCRAPER_API_KEY in Vercel. Fill manually for now.')
+      } else if (result.reason === 'scraper_credits') {
+        setMsg('The scraping account is out of credits — top it up in your ScraperAPI dashboard. Fill manually for now.')
       } else {
-        setMsg('StreetEasy blocked the fetch this time. Fill manually or try again.')
+        setMsg('StreetEasy blocked the fetch this time (even via proxy). Fill manually or try again in a bit.')
       }
       return
     }

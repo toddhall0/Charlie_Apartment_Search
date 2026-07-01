@@ -22,24 +22,44 @@ const SCRAPER_KEY = process.env.SCRAPER_API_KEY
 const SCRAPER_PROVIDER = (process.env.SCRAPER_PROVIDER || 'scraperapi').toLowerCase()
 
 // Build the provider request URL that returns the target page's HTML.
-function proxyUrl(target) {
-  const enc = encodeURIComponent(target)
+// opts.render enables JS execution (runs the PerimeterX challenge); opts.ultra
+// uses the hardest residential/stealth proxy pool. We escalate to both only on
+// a retry, so a normal fetch stays cheap.
+function proxyUrl(target, opts = {}) {
   if (SCRAPER_PROVIDER === 'scrapingbee') {
-    return (
-      'https://app.scrapingbee.com/api/v1/?' +
-      `api_key=${SCRAPER_KEY}&url=${enc}` +
-      '&render_js=true&premium_proxy=true&country_code=us'
-    )
+    const p = new URLSearchParams({
+      api_key: SCRAPER_KEY,
+      url: target,
+      render_js: opts.render ? 'true' : 'false',
+      premium_proxy: 'true',
+      country_code: 'us',
+    })
+    if (opts.ultra) p.set('stealth_proxy', 'true')
+    return 'https://app.scrapingbee.com/api/v1/?' + p.toString()
   }
-  // Default: ScraperAPI. premium=true uses residential proxies needed to get
-  // past StreetEasy's bot protection. We skip JS rendering — the price,
-  // net-effective, and JSON-LD data are in the server-rendered HTML, so a
-  // non-rendered fetch is much faster and uses far fewer credits.
-  return (
-    'https://api.scraperapi.com/?' +
-    `api_key=${SCRAPER_KEY}&url=${enc}` +
-    '&premium=true&country_code=us'
-  )
+  // Default: ScraperAPI. premium/ultra_premium select residential proxy pools
+  // needed to get past StreetEasy's bot protection; ultra_premium + render is
+  // the strongest (and priciest) combination, used only as an escalation.
+  const p = new URLSearchParams({ api_key: SCRAPER_KEY, url: target, country_code: 'us' })
+  if (opts.ultra) p.set('ultra_premium', 'true')
+  else p.set('premium', 'true')
+  if (opts.render) p.set('render', 'true')
+  return 'https://api.scraperapi.com/?' + p.toString()
+}
+
+// The scraping provider (not StreetEasy) rejected us: bad/expired key, or the
+// account is out of credits / on the wrong plan. Worth telling the user, since
+// retrying won't help.
+function providerAuthReason(html, status) {
+  const m = (html || '').toLowerCase()
+  if (status === 401) return 'scraper_auth'
+  if (m.includes('out of credits') || m.includes('credit') || m.includes('quota') || m.includes('exceeded')) {
+    return 'scraper_credits'
+  }
+  if (status === 403 && (m.includes('api key') || m.includes('scraperapi') || m.includes('scrapingbee'))) {
+    return 'scraper_auth'
+  }
+  return null
 }
 
 // Allow up to 60s — proxied scrapes can be slow (default Vercel cap is 10s).
@@ -291,32 +311,65 @@ export default async function handler(req, res) {
     })
   }
 
+  // Escalation ladder: a cheap non-rendered fetch first, then JS-rendering with
+  // the strongest proxy pool if StreetEasy challenges us. Stop as soon as one
+  // attempt returns real content.
+  const attempts = [
+    { render: false, ultra: false },
+    { render: true, ultra: true },
+  ]
+
   let status = 0
   let html = ''
-  try {
-    const upstream = await fetch(proxyUrl(url), {
-      headers: {
-        'User-Agent': UA,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-    })
-    status = upstream.status
-    html = await upstream.text()
-  } catch (e) {
-    return res.status(502).json({ ok: false, blocked: true, status, error: String(e.message || e) })
+  let authReason = null
+  const tried = []
+
+  for (const opt of attempts) {
+    let attemptStatus = 0
+    let attemptHtml = ''
+    try {
+      const upstream = await fetch(proxyUrl(url, opt), {
+        headers: {
+          'User-Agent': UA,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'follow',
+      })
+      attemptStatus = upstream.status
+      attemptHtml = await upstream.text()
+    } catch (e) {
+      tried.push({ ...opt, status: 'fetch_error', error: String(e.message || e) })
+      continue
+    }
+
+    status = attemptStatus
+    html = attemptHtml
+    tried.push({ ...opt, status: attemptStatus, length: attemptHtml.length })
+
+    // Provider auth/credit failure: retrying with more expensive options won't
+    // help, so bail out immediately with a clear reason.
+    authReason = providerAuthReason(attemptHtml, attemptStatus)
+    if (authReason) break
+
+    if (!looksBlocked(attemptHtml, attemptStatus)) break // got real content
+  }
+
+  if (authReason) {
+    console.error('scrape provider auth issue', { url, authReason, tried })
+    return res.status(200).json({ ok: false, blocked: true, status, reason: authReason, fields: {}, debug: { tried } })
   }
 
   const blocked = looksBlocked(html, status)
   if (blocked) {
+    console.error('scrape blocked by upstream', { url, tried })
     return res.status(200).json({
       ok: false,
       blocked: true,
       status,
       reason: 'upstream_blocked',
       fields: {},
-      debug: { length: html.length },
+      debug: { length: html.length, tried },
     })
   }
 
